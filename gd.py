@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 from dset import df_no_NaN
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 #Adaptar el data frame para volverlo un problema binario (media=0.5)
 def classification_metrics(y_true, y_pred):
@@ -17,9 +20,21 @@ def classification_metrics(y_true, y_pred):
     tnr = TN / (TN + FP) if (TN + FP) > 0 else 0   # Specificity
     prec = TP / (TP + FP) if (TP + FP) > 0 else 0
     prev = np.mean(y_true)
+    
+    # Calculate accuracy score (standard sklearn accuracy)
+    accuracy_score_val = accuracy_score(y_true, y_pred)
+    
+    # Calculate bias score (difference between TPR and TNR)
+    bias_score = abs(tpr - tnr)
+    
+    # Calculate variance score (measure of prediction consistency)
+    variance_score = np.var(y_pred) if len(y_pred) > 0 else 0
 
     return {
         "Accuracy": acc,
+        "Accuracy Score": accuracy_score_val,
+        "Bias Score": bias_score,
+        "Variance Score": variance_score,
         "Misclassification Rate": mis_rate,
         "True Positive Rate (Recall)": tpr,
         "False Positive Rate": fpr,
@@ -105,10 +120,6 @@ def funcion_update(params, samples, y, alfa):
     params_nuevo[j] = params[j] - alfa*(1/len(samples))*acum
   return params_nuevo
 
-
-
-
-
 #sgd_logistic regression
 def entrenar(samples, y, val_samples=None, val_y= None, epochs=300, alfa=0.01):
     global __errores__
@@ -140,7 +151,6 @@ def entrenar(samples, y, val_samples=None, val_y= None, epochs=300, alfa=0.01):
           val_losses.append(val_cost)
           val_accuracies.append(val_acc)
 
-
           if epoch % 50 == 0:  # cada 50 epochs revisamos el costo pa no llenar tanto la terminal
               print(f"Epoch {epoch}, Train Cost: {cost:.4f}, Train Accuracy: {cert}")
 
@@ -148,7 +158,6 @@ def entrenar(samples, y, val_samples=None, val_y= None, epochs=300, alfa=0.01):
                  print(f"Epoch {epoch}, Val Cost: {val_cost:.4f}, Val Acc: {val_acc:.4f}")
     
     return params
-
 
 def evaluar(params, samples, y):
     preds = [1 if funcion_h(params, sample) >= 0.5 else 0 for sample in samples]
@@ -167,7 +176,15 @@ def evaluar(params, samples, y):
     precision = TP / (TP+FP+1e-9)
     prevalence = (TP+FN) / len(y)
     
+    # Calculate additional metrics
+    accuracy_score_val = accuracy_score(y, preds)
+    bias_score = abs(TPR - TNR)
+    variance_score = np.var(preds) if len(preds) > 0 else 0
+    
     print(f"Accuracy: {accuracy:.3f}")
+    print(f"Accuracy Score: {accuracy_score_val:.3f}")
+    print(f"Bias Score: {bias_score:.3f}")
+    print(f"Variance Score: {variance_score:.3f}")
     print(f"Misclassification Rate: {misclass_rate:.3f}")
     print(f"True Positive Rate (Recall): {TPR:.3f}")
     print(f"False Positive Rate: {FPR:.3f}")
@@ -175,41 +192,69 @@ def evaluar(params, samples, y):
     print(f"Precision: {precision:.3f}")
     print(f"Prevalence: {prevalence:.3f}")
     
-    return preds
+    return preds, TP, TN, FP, FN
 
+def plot_individual_confusion_matrices(results, score_cols):
+    """Plot confusion matrices for each feature in a single image"""
+    n_features = len(score_cols)
+    n_cols = 4  # Number of columns in the subplot grid
+    n_rows = (n_features + n_cols - 1) // n_cols  # Calculate number of rows needed
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 5 * n_rows))
+    axes = axes.flatten()  # Flatten the 2D array of axes for easy indexing
+    
+    for i, target_col in enumerate(score_cols):
+        ax = axes[i]
+        metrics = results[target_col]
+        
+        # Create confusion matrix data
+        cm_data = np.array([[metrics['TN'], metrics['FP']],
+                           [metrics['FN'], metrics['TP']]])
+        
+        # Plot heatmap
+        sns.heatmap(cm_data, annot=True, fmt='d', cmap='Blues', ax=ax,
+                   xticklabels=['Predicted 0', 'Predicted 1'],
+                   yticklabels=['Actual 0', 'Actual 1'])
+        
+        ax.set_title(f'{target_col}\nTP: {metrics["TP"]}, TN: {metrics["TN"]}\nFP: {metrics["FP"]}, FN: {metrics["FN"]}', 
+                    fontsize=10, pad=10)
+        ax.set_xlabel('Predicted Label')
+        ax.set_ylabel('True Label')
+    
+    # Hide any unused subplots
+    for j in range(i + 1, len(axes)):
+        axes[j].set_visible(False)
+    
+    plt.suptitle('Confusion Matrices for Each Feature', fontsize=16, fontweight='bold', y=0.98)
+    plt.tight_layout()
+    plt.show()
 
-def run_logistic_regression(X, y, score_cols, epochs=300, alfa=0.01):
-    results = {}
-
-    X = score_cols.values #score columns are dfx 
-    y = target_col.values #and target columns are dfy
-
-    # 2. Normalización (Z-score)
-    X_mean = np.mean(X, axis=0)
-    X_std  = np.std(X, axis=0)
-    X_norm = (X - X_mean) / (X_std + 1e-9)
-
-    # añadir columna de bias
-    X_bias = np.c_[np.ones((X.shape[0], 1)), X]
-
-    for col in score_cols:
-        print(f"\n=== Entrenando para {col} ===")
-
-        # entrenar
-        params = entrenar(X_bias, y, epochs=epochs, alfa=alfa)
-
-        # evaluar
-        preds, acc = evaluar(params, X_bias, y)
-
-        print(f"Accuracy en {col}: {acc:.4f}")
-        results[col] = {
-            "params": params,
-            "preds": preds,
-            "accuracy": acc
-        }
-
-
-    return results
+def plot_overall_confusion_matrix(results, score_cols):
+    """Plot overall confusion matrix across all targets"""
+    total_TP = sum([results[col]['TP'] for col in score_cols])
+    total_TN = sum([results[col]['TN'] for col in score_cols])
+    total_FP = sum([results[col]['FP'] for col in score_cols])
+    total_FN = sum([results[col]['FN'] for col in score_cols])
+    
+    # Create overall confusion matrix
+    cm_data = np.array([[total_TN, total_FP],
+                       [total_FN, total_TP]])
+    
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm_data, annot=True, fmt='d', cmap='Blues', 
+                xticklabels=['Predicted 0', 'Predicted 1'],
+                yticklabels=['Actual 0', 'Actual 1'])
+    
+    plt.title('Overall Confusion Matrix (All Features Combined)\n'
+             f'Total TP: {total_TP}, Total TN: {total_TN}\n'
+             f'Total FP: {total_FP}, Total FN: {total_FN}', 
+             fontsize=14, pad=20)
+    plt.ylabel('True Label')
+    plt.xlabel('Predicted Label')
+    plt.tight_layout()
+    plt.show()
+    
+    return total_TP, total_TN, total_FP, total_FN
 
 # Loop principal
 score_cols = ["PTAT","STA","STR","DFM","RUA","RLS","RTP",
@@ -217,6 +262,8 @@ score_cols = ["PTAT","STA","STR","DFM","RUA","RLS","RTP",
               "UCL","UDP","FTP"]
 
 results = {}
+all_metrics = {}
+confusion_matrix_data = {}
 
 for target_col in score_cols:
     print(f"\n=== Entrenando para {target_col} ===")
@@ -245,25 +292,101 @@ for target_col in score_cols:
 
     # entrenar
     params = entrenar(X_bias, y, epochs=300, alfa=0.05)
-
     paramsChido = entrenar(X_train_bias, y_train, X_val_bias, y_val, epochs=300, alfa=0.05)
 
     # evaluar
-    preds = evaluar(params, X_bias, y)
+    preds, TP, TN, FP, FN = evaluar(params, X_bias, y)
     acc = np.mean(preds==y)
 
     # metrics
     metrics = classification_metrics(y, preds)
     results[target_col] = metrics
+    all_metrics[target_col] = metrics
+    
+    # Store confusion matrix data
+    confusion_matrix_data[target_col] = {
+        'TP': TP, 'TN': TN, 'FP': FP, 'FN': FN
+    }
 
     # imprimir métricas
     print(f"\n=== Results for {target_col} ===")
     for k,v in metrics.items():
-        print(f"{k}: {v:.3f}" if isinstance(v,float) else f"{k}: {v}")
+        if isinstance(v,float):
+            print(f"{k}: {v:.3f}")
+        else:
+            print(f"{k}: {v}")
 
+# Plot individual confusion matrices for each feature
+plot_individual_confusion_matrices(results, score_cols)
+
+# Plot overall confusion matrix
+total_TP, total_TN, total_FP, total_FN = plot_overall_confusion_matrix(results, score_cols)
+
+# Calculate overall bias and variance scores
+overall_bias_score = np.mean([all_metrics[col]['Bias Score'] for col in score_cols])
+overall_variance_score = np.mean([all_metrics[col]['Variance Score'] for col in score_cols])
+
+print(f"\n{'='*60}")
+print("OVERALL SUMMARY")
+print(f"{'='*60}")
+print(f"Total True Positives (TP): {total_TP}")
+print(f"Total True Negatives (TN): {total_TN}")
+print(f"Total False Positives (FP): {total_FP}")
+print(f"Total False Negatives (FN): {total_FN}")
+print(f"Overall Bias Score (Average): {overall_bias_score:.3f}")
+print(f"Overall Variance Score (Average): {overall_variance_score:.3f}")
+
+# Plot comparison of model performance across different targets
+metrics_to_compare = ['Accuracy Score', 'Bias Score', 'Precision', 
+                     'True Positive Rate (Recall)', 'True Negative Rate (Specificity)']
+
+comparison_data = []
+for target in score_cols:
+    row = [target]
+    for metric in metrics_to_compare:
+        row.append(all_metrics[target][metric])
+    comparison_data.append(row)
+
+comparison_df = pd.DataFrame(comparison_data, columns=['Target'] + metrics_to_compare)
+comparison_df = comparison_df.sort_values('Accuracy Score', ascending=False)
+
+# Create histogram plot
+plt.figure(figsize=(14, 8))
+x_pos = np.arange(len(comparison_df))
+width = 0.15
+
+# Plot each metric as separate bars
+for i, metric in enumerate(metrics_to_compare):
+    plt.bar(x_pos + i * width, comparison_df[metric], width, label=metric, alpha=0.8)
+
+plt.xlabel('Target Variables')
+plt.ylabel('Score')
+plt.title('Logistic Regression Performance Metrics Across Different Targets', fontsize=16, fontweight='bold')
+plt.xticks(x_pos + width * 2, comparison_df['Target'], rotation=45, ha='right')
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.grid(True, alpha=0.3, axis='y')
+plt.tight_layout()
+plt.show()
+
+# Print summary of best performing models
+print(f"\n{'='*60}")
+print("Top 5 Best Performing Models by Accuracy Score")
+print(f"{'='*60}")
+
+top_5 = comparison_df.nlargest(5, 'Accuracy Score')[['Target', 'Accuracy Score', 'Bias Score', 'Precision']]
+for i, (idx, row) in enumerate(top_5.iterrows(), 1):
+    print(f"{i}. {row['Target']}: Accuracy={row['Accuracy Score']:.3f}, Bias={row['Bias Score']:.3f}, Precision={row['Precision']:.3f}")
+
+# Print summary of least biased models
+print(f"\n{'='*60}")
+print("Top 5 Least Biased Models (Lowest Bias Score)")
+print(f"{'='*60}")
+
+least_biased = comparison_df.nsmallest(5, 'Bias Score')[['Target', 'Accuracy Score', 'Bias Score']]
+for i, (idx, row) in enumerate(least_biased.iterrows(), 1):
+    print(f"{i}. {row['Target']}: Accuracy={row['Accuracy Score']:.3f}, Bias={row['Bias Score']:.3f}")
 
 #promediar partes para graficar (porque ahora nos daría 5100 valores por correr los 17 features 300 veces.)
-
 certezaF = []
 certezaN = []
 j = 0
@@ -283,18 +406,6 @@ for i in range(0,300):
    for p in range(0,17):
       suma+=certezaF[p][i]
    certezaF2.append(suma/17)
-
-
-import matplotlib.pyplot as plt  #use this to generate a graph of the errors/loss so we can see whats going on (diagnostics)
-'''
-plt.plot(__errores__, label="Train cost")
-plt.plot(certezaF2, label="Accuracy")
-plt.xlabel("Epochs")
-plt.ylabel("Learning curve")
-plt.title("Training loss")
-plt.show()
-'''
-
 
 # Intento de grafica con todo en uno
 fig, ax1 = plt.subplots(figsize=(10, 6))
@@ -316,7 +427,6 @@ ax2.plot(train_accuracies, label='Training Accuracy', color='blue', linestyle='-
 ax2.plot(val_accuracies, label='Validation Accuracy', color='blue', linestyle='--')
 ax2.tick_params(axis='y', labelcolor=color)
 ax2.set_ylim(0, 1)  # Accuracy ranges from 0 to 1
-
 
 lines1, labels1 = ax1.get_legend_handles_labels()
 lines2, labels2 = ax2.get_legend_handles_labels()
