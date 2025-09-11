@@ -9,7 +9,7 @@ El siguiente repositorio consiste en una implementación de una técnica de apre
   
 - **doc.pdf**: Es un informe con la descripcion preliminar del modelo, planteamiento del probelma, el conjunto de datos, implementacion del modelo y los resultados del entrenamiento
   
-- **linear_traits_spanish.pdf**: Contiene las características de conformación lineal a las que hace referencia el proyecto y la forma en la que se califican por un evaluador de ganado para agregar contexto.
+- **linear_traits_spanish.pdf**: Contiene las características de conformación lineal a las que hace referencia el proyecto y la forma en la que se califican por un evaluador de ganado para agregar contexto. (Downloading it might be necessary for visualization)
 
 /
 /
