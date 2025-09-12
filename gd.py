@@ -53,6 +53,10 @@ val_losses = []
 train_accuracies = []
 val_accuracies = []
 
+#listas para almacenar valores de predicción de un toro nuevo
+trained_params = {}
+normalization_params = {}  
+
 #-------------------------------------------------------------------------------------------------------------------
 # θ_j := θ_j - (α/m) * Σ_{i=1 to m} [ (h_θ(x_i) - y_i) * x_i ]
 #-------------------------------------------------------------------------------------------------------------------
@@ -286,6 +290,9 @@ for target_col in score_cols:
     X_train_norm = (X_train - X_mean) / (X_std + 1e-9)
     X_val_norm = (X_val - X_mean) / (X_std + 1e-9)
 
+    # Guardar parametros normalizados para prediccion de toro nuevo
+    normalization_params[target_col] = {'mean': X_mean, 'std': X_std}
+
     # Añadir columna de bias
     X_train_bias = np.c_[np.ones((X_train_norm.shape[0], 1)), X_train_norm]
     X_val_bias   = np.c_[np.ones((X_val_norm.shape[0], 1)), X_val_norm]
@@ -293,6 +300,9 @@ for target_col in score_cols:
     # entrenar
     params = entrenar(X_bias, y, epochs=300, alfa=0.05)
     paramsChido = entrenar(X_train_bias, y_train, X_val_bias, y_val, epochs=300, alfa=0.05)
+
+    #Guardar parametros entrenados para predicción de toro nuevo
+    trained_params[target_col] = paramsChido
 
     # evaluar
     preds, TP, TN, FP, FN = evaluar(params, X_bias, y)
@@ -386,6 +396,69 @@ least_biased = comparison_df.nsmallest(5, 'Bias Score')[['Target', 'Accuracy Sco
 for i, (idx, row) in enumerate(least_biased.iterrows(), 1):
     print(f"{i}. {row['Target']}: Accuracy={row['Accuracy Score']:.3f}, Bias={row['Bias Score']:.3f}")
 
+
+
+
+print(f"\n{'='*60}")
+print("EXAMPLE PREDICTION: FARMER INVENTS A BULL")
+print(f"{'='*60}")
+
+# Example: farmer invents a bull with "average" values
+invented_bull = {
+    "PTAT": 1.5,
+    "STA": 0.8,
+    "STR": -0.2,
+    "DFM": 1.2,
+    "RUA": 0.0,
+    "RLS": 0.5,
+    "RTP": -0.1,
+    "FTL": 1.0,
+    "RW": 0.9,
+    "RLR": 1.1,
+    "FTA": 0.4,
+    "FUA": -0.3,
+    "RUH": 0.7,
+    "RUW": 0.6,
+    "UCL": -0.2,
+    "UDP": 1.0,
+    "FTP": 0.5
+}
+
+# For each target feature, predict whether the invented bull is above/below median
+print("\nPredictions for the invented bull across all features:")
+print("-" * 60)
+
+for target_col in score_cols:
+    # Get the median value for this target
+    median_val = df_no_NaN[target_col].median()
+    
+    # Prepare features (exclude the target column)
+    feature_cols = [c for c in score_cols if c != target_col]
+    
+    # Create input vector for the invented bull
+    X_new = np.array([invented_bull[col] for col in feature_cols])
+    
+    # Normalize using the stored parameters
+    norm_params = normalization_params[target_col]
+    X_new_norm = (X_new - norm_params['mean']) / (norm_params['std'] + 1e-9)
+    
+    # Add bias term
+    X_new_bias = np.concatenate([[1], X_new_norm])
+    
+    # Get the trained parameters
+    params = trained_params[target_col]
+    
+    # Make prediction
+    prediction_prob = funcion_h(params, X_new_bias)
+    prediction = 1 if prediction_prob >= 0.5 else 0
+    
+    status = "ABOVE" if prediction == 1 else "BELOW"
+    
+    print(f"{target_col}: Median = {median_val:.2f}, Prediction = {status} median (prob: {prediction_prob:.3f})")
+
+
+
+
 #promediar partes para graficar (porque ahora nos daría 5100 valores por correr los 17 features 300 veces.)
 certezaF = []
 certezaN = []
@@ -435,3 +508,7 @@ ax1.legend(lines1 + lines2, labels1 + labels2, loc='center right')
 plt.title('Training Progress')
 plt.show()
  
+
+
+
+
