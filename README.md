@@ -1,25 +1,13 @@
-# Modelo de clasificación para la evaluación de Toros 
-El siguiente repositorio consiste en una implementación de una técnica de aprendizaje máquina sin el uso de un framework para la prediccion de clases dependiendo de los puntajes de los toros para cada una de sus caracteristicas fisicas.
+# Classification Model for Bull Evaluation
+The following repository consists of a machine learning technique implementation without using a framework compared to using a framework for predicting classes based on bulls' scores for each of their physical characteristics.
 
-## Modulos actuales:
+## Current modules:
 
-- **toros.csv** : Es la base de datos proveniente del catalogo abierto de SelectSires para sus sementales junto con sus caracteristicas
+- **toros.csv** : Database originating from SelectSires' open catalog for their bulls along with their characteristics
   
-- **dset.py** : contiene el proceso utilizado para la limpieza y visualizacion de datos
+- **dset.py** : Contains the process used for data cleaning and visualization
   
-- **doc.pdf**: Es un informe con la descripcion preliminar del modelo, planteamiento del probelma, el conjunto de datos, implementacion del modelo y los resultados del entrenamiento
+- **doc.pdf**: Report with the preliminary description of the model, problem statement, dataset, model implementation, and training/validation/test results along with other metrics.
   
-- **linear_traits_spanish.pdf**: Contiene las características de conformación lineal a las que hace referencia el proyecto y la forma en la que se califican por un evaluador de ganado para agregar contexto. (Downloading it might be necessary for visualization)
+- **linear_traits_spanish.pdf**:  Contains the linear conformation traits referenced in the project and how they are scored by a livestock evaluator to provide context. (Downloading it might be necessary for visualization)
 
-/
-/
-/
-/
-/
-
-El objetivo es dividir cada tecnica de aprendizaje de maquina por modulo como una mejora:
-- main.py : Datos principales y manda a llamar a los demas modulos
-- dset.py : limpieza y visualizacion de datos
-- gd.py : gradiante descendiente, regresion logistica y metricas
-- plot.py : graficacion de cada punto de interes, como el costo y la certeza
-- flask.py : pequena interfaz de usuario para el hipotetico productor de lacteos
