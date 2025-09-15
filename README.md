@@ -8,6 +8,10 @@ The following repository consists of a machine learning technique implementation
 - **dset.py** : Contains the process used for data cleaning and visualization
   
 - **doc.pdf**: Report with the preliminary description of the model, problem statement, dataset, model implementation, and training/validation/test results along with other metrics.
+
+- **framework.py**: Model using framework (XGBoost).
+ 
+- **gd.py**: Model without framework (Logistic Regression + Gradient Descent).
   
 - **linear_traits_spanish.pdf**:  Contains the linear conformation traits referenced in the project and how they are scored by a livestock evaluator to provide context. (Downloading it might be necessary for visualization)
 
