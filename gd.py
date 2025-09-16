@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from dset import df_no_NaN
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, auc
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -53,9 +53,6 @@ val_losses = []
 train_accuracies = []
 val_accuracies = []
 
-#listas para almacenar valores de predicción de un toro nuevo
-trained_params = {}
-normalization_params = {}  
 
 #-------------------------------------------------------------------------------------------------------------------
 # θ_j := θ_j - (α/m) * Σ_{i=1 to m} [ (h_θ(x_i) - y_i) * x_i ]
@@ -260,6 +257,67 @@ def plot_overall_confusion_matrix(results, score_cols):
     
     return total_TP, total_TN, total_FP, total_FN
 
+
+
+# Add ROC curve plotting function
+def plot_roc_curves(results_dict, X_data, y_data, score_cols):
+    """Plot ROC curves for all features and an overall ROC curve"""
+    plt.figure(figsize=(12, 10))
+    
+    # Colors for individual ROC curves
+    colors = plt.cm.tab20(np.linspace(0, 1, len(score_cols)))
+    
+    # Plot ROC curves for each feature
+    for i, target_col in enumerate(score_cols):
+        # Get the parameters for this feature
+        params = results_dict[target_col]['params']
+        
+        # Calculate probabilities
+        probs = [funcion_h(params, sample) for sample in X_data[target_col]]
+        
+        # Calculate ROC curve
+        fpr, tpr, _ = roc_curve(y_data[target_col], probs)
+        roc_auc = auc(fpr, tpr)
+        
+        # Plot ROC curve
+        plt.plot(fpr, tpr, color=colors[i], lw=2, 
+                label=f'{target_col} (AUC = {roc_auc:.3f})', alpha=0.7)
+    
+    # Plot overall ROC curve (average of all predictions)
+    all_probs = []
+    all_y = []
+    for target_col in score_cols:
+        params = results_dict[target_col]['params']
+        probs = [funcion_h(params, sample) for sample in X_data[target_col]]
+        all_probs.extend(probs)
+        all_y.extend(y_data[target_col])
+    
+    fpr_overall, tpr_overall, _ = roc_curve(all_y, all_probs)
+    roc_auc_overall = auc(fpr_overall, tpr_overall)
+    
+    plt.plot(fpr_overall, tpr_overall, color='black', lw=3, 
+            label=f'Overall (AUC = {roc_auc_overall:.3f})', linestyle='--')
+    
+    # Plot diagonal line (random classifier)
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--', label='Random (AUC = 0.5)')
+    
+    # Format the plot
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('ROC Curves for All Features and Overall Performance')
+    plt.legend(loc="lower right", bbox_to_anchor=(1.0, 0.0), ncol=2, fontsize=8)
+    plt.grid(True, alpha=0.3)
+    
+    # Save the figure
+    plt.savefig('roc_curves_comparison.png', dpi=300, bbox_inches='tight')
+    plt.show()
+    
+    return roc_auc_overall
+
+
+
 # Loop principal
 score_cols = ["PTAT","STA","STR","DFM","RUA","RLS","RTP",
               "FTL","RW","RLR","FTA","FUA","RUH","RUW",
@@ -268,6 +326,10 @@ score_cols = ["PTAT","STA","STR","DFM","RUA","RLS","RTP",
 results = {}
 all_metrics = {}
 confusion_matrix_data = {}
+X_data_dict = {}  # Store X data for each target
+y_data_dict = {}  # Store y data for each target
+params_dict = {}  # Store parameters for each target
+
 
 for target_col in score_cols:
     print(f"\n=== Entrenando para {target_col} ===")
@@ -281,6 +343,10 @@ for target_col in score_cols:
     X = df_no_NaN[feature_cols].values
     X_bias = np.c_[np.ones((X.shape[0], 1)), X]
 
+    # Store data for ROC curve calculation
+    X_data_dict[target_col] = X_bias
+    y_data_dict[target_col] = y
+
     # Dividir entre sets de entrenar y validar 
     X_train, X_val, y_train, y_val = train_test_split(X,y,test_size=0.2,random_state=42) #aleatoriedad de 42 para reproducibilidad
 
@@ -290,9 +356,6 @@ for target_col in score_cols:
     X_train_norm = (X_train - X_mean) / (X_std + 1e-9)
     X_val_norm = (X_val - X_mean) / (X_std + 1e-9)
 
-    # Guardar parametros normalizados para prediccion de toro nuevo
-    normalization_params[target_col] = {'mean': X_mean, 'std': X_std}
-
     # Añadir columna de bias
     X_train_bias = np.c_[np.ones((X_train_norm.shape[0], 1)), X_train_norm]
     X_val_bias   = np.c_[np.ones((X_val_norm.shape[0], 1)), X_val_norm]
@@ -300,9 +363,8 @@ for target_col in score_cols:
     # entrenar
     params = entrenar(X_bias, y, epochs=300, alfa=0.05)
     paramsChido = entrenar(X_train_bias, y_train, X_val_bias, y_val, epochs=300, alfa=0.05)
-
-    #Guardar parametros entrenados para predicción de toro nuevo
-    trained_params[target_col] = paramsChido
+    # Store parameters for this target
+    params_dict[target_col] = params
 
     # evaluar
     preds, TP, TN, FP, FN = evaluar(params, X_bias, y)
@@ -326,6 +388,16 @@ for target_col in score_cols:
         else:
             print(f"{k}: {v}")
 
+
+results_dict = {}
+for target_col in score_cols:
+    results_dict[target_col] = {
+        'metrics': results[target_col],
+        'params': params_dict[target_col],
+        'X_data': X_data_dict[target_col],
+        'y_data': y_data_dict[target_col]
+    }
+
 # Plot individual confusion matrices for each feature
 plot_individual_confusion_matrices(results, score_cols)
 
@@ -345,6 +417,13 @@ print(f"Total False Positives (FP): {total_FP}")
 print(f"Total False Negatives (FN): {total_FN}")
 print(f"Overall Bias Score (Average): {overall_bias_score:.3f}")
 print(f"Overall Variance Score (Average): {overall_variance_score:.3f}")
+
+
+# Add ROC curve plotting after all other plots
+print("\nGenerating ROC curves comparison...")
+overall_auc = plot_roc_curves(results_dict, X_data_dict, y_data_dict, score_cols)
+print(f"Overall AUC: {overall_auc:.3f}")
+
 
 # Plot comparison of model performance across different targets
 metrics_to_compare = ['Accuracy Score', 'Bias Score', 'Precision', 
@@ -392,72 +471,9 @@ print(f"\n{'='*60}")
 print("Top 5 Least Biased Models (Lowest Bias Score)")
 print(f"{'='*60}")
 
-least_biased = comparison_df.nsmallest(5, 'Bias Score')[['Target', 'Accuracy Score', 'Bias Score']]
+least_biased = comparison_df.nsmallest(5, 'Bias Score')[['Target', 'Accuracy Score', 'Bias Score', 'Precision']]
 for i, (idx, row) in enumerate(least_biased.iterrows(), 1):
-    print(f"{i}. {row['Target']}: Accuracy={row['Accuracy Score']:.3f}, Bias={row['Bias Score']:.3f}")
-
-
-
-
-print(f"\n{'='*60}")
-print("EXAMPLE PREDICTION: FARMER INVENTS A BULL")
-print(f"{'='*60}")
-
-# Example: farmer invents a bull with "average" values
-invented_bull = {
-    "PTAT": 1.5,
-    "STA": 0.8,
-    "STR": -0.2,
-    "DFM": 1.2,
-    "RUA": 0.0,
-    "RLS": 0.5,
-    "RTP": -0.1,
-    "FTL": 1.0,
-    "RW": 0.9,
-    "RLR": 1.1,
-    "FTA": 0.4,
-    "FUA": -0.3,
-    "RUH": 0.7,
-    "RUW": 0.6,
-    "UCL": -0.2,
-    "UDP": 1.0,
-    "FTP": 0.5
-}
-
-# For each target feature, predict whether the invented bull is above/below median
-print("\nPredictions for the invented bull across all features:")
-print("-" * 60)
-
-for target_col in score_cols:
-    # Get the median value for this target
-    median_val = df_no_NaN[target_col].median()
-    
-    # Prepare features (exclude the target column)
-    feature_cols = [c for c in score_cols if c != target_col]
-    
-    # Create input vector for the invented bull
-    X_new = np.array([invented_bull[col] for col in feature_cols])
-    
-    # Normalize using the stored parameters
-    norm_params = normalization_params[target_col]
-    X_new_norm = (X_new - norm_params['mean']) / (norm_params['std'] + 1e-9)
-    
-    # Add bias term
-    X_new_bias = np.concatenate([[1], X_new_norm])
-    
-    # Get the trained parameters
-    params = trained_params[target_col]
-    
-    # Make prediction
-    prediction_prob = funcion_h(params, X_new_bias)
-    prediction = 1 if prediction_prob >= 0.5 else 0
-    
-    status = "ABOVE" if prediction == 1 else "BELOW"
-    
-    print(f"{target_col}: Median = {median_val:.2f}, Prediction = {status} median (prob: {prediction_prob:.3f})")
-
-
-
+    print(f"{i}. {row['Target']}: Accuracy={row['Accuracy Score']:.3f}, Bias={row['Bias Score']:.3f}, Precision={row['Precision']:.3f}")
 
 #promediar partes para graficar (porque ahora nos daría 5100 valores por correr los 17 features 300 veces.)
 certezaF = []
@@ -507,8 +523,12 @@ ax1.legend(lines1 + lines2, labels1 + labels2, loc='center right')
 
 plt.title('Training Progress')
 plt.show()
- 
 
 
-
+# Print overall training metrics
+print(f"\nOverall Training Metrics:")
+print(f"Final Training Loss: {train_losses[-1]:.4f}")
+print(f"Final Validation Loss: {val_losses[-1]:.4f}")
+print(f"Final Training Accuracy: {train_accuracies[-1]:.4f}")
+print(f"Final Validation Accuracy: {val_accuracies[-1]:.4f}")
 
